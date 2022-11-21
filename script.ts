@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import express from "express";
 import dotenv from "dotenv";
 import path from "path";
+import { body, validationResult } from "express-validator";
 const port = process.env.PORT || 3002;
 
 dotenv.config();
@@ -33,24 +34,46 @@ app.use(express.static(path.join(__dirname, "views")));
 
 app.get("/", async (req, res) => {
   const users = await prisma.user.findMany({});
-  console.log(users);
   res.render("signup", { users });
 });
 
-app.post("/", async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const user = await prisma.user.create({
-      data: {
-        username,
-        password,
-      },
-    });
-  } catch (err) {
-    console.log(err);
+app.post(
+  "/",
+  body("username").trim().escape().notEmpty().withMessage("invalid username"),
+  body("password")
+    .trim()
+    .escape()
+    .notEmpty()
+    .isLength({ min: 1 })
+    .withMessage("invalid password"),
+  body("confirm")
+    .trim()
+    .escape()
+    .notEmpty()
+    .isLength({ min: 1 })
+    .custom((value, { req }) => value === req.body.password)
+    .withMessage("password does not match"),
+  async (req, res) => {
+    const { username, password } = req.body;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log(errors.array());
+      return res.redirect("/");
+    }
+    try {
+      await prisma.user.create({
+        data: {
+          username,
+          password,
+        },
+      });
+    } catch (err) {
+      console.log("failed to create new user");
+      console.log(err);
+    }
+    return res.redirect("/");
   }
-  return res.redirect("/");
-});
+);
 
 app.listen(port, () => {
   console.log(`app listening on port ${port}`);
